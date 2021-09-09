@@ -78,71 +78,88 @@ func NewCSRSignController(
 
 func (c *csrSignController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	csrName := syncCtx.QueueKey()
-	klog.V(4).Infof("Reconciling CertificateSigningRequests %q", csrName)
+	klog.Infof("++++>CSRSignController(%s)", csrName)
 	csr, err := c.csrLister.Get(csrName)
 	if errors.IsNotFound(err) {
+		klog.Infof("++++>CSRSignController(%s): exit 0", csrName)
 		return nil
 	}
 	if err != nil {
+		klog.Infof("++++>CSRSignController(%s): exit 1", csrName)
 		return err
 	}
 	csr = csr.DeepCopy()
 
 	if !isCSRApproved(csr) {
+		klog.Infof("++++>CSRSignController(%s): exit 2", csrName)
 		return nil
 	}
 
 	if len(csr.Status.Certificate) > 0 {
+		klog.Infof("++++>CSRSignController(%s): exit 3", csrName)
 		return nil
 	}
 
 	// Do not sigh apiserver cert
 	if csr.Spec.SignerName == certificatesv1.KubeAPIServerClientSignerName {
+		klog.Infof("++++>CSRSignController(%s): exit 4", csrName)
 		return nil
 	}
 
 	addonName := csr.Labels[constants.AddonLabel]
 	agentAddon, ok := c.agentAddons[addonName]
 	if !ok {
+		klog.Infof("++++>CSRSignController(%s): exit 5", csrName)
 		return nil
 	}
 
 	registrationOption := agentAddon.GetAgentAddonOptions().Registration
 	if registrationOption == nil {
+		klog.Infof("++++>CSRSignController(%s): exit 6", csrName)
 		return nil
 	}
 	clusterName, ok := csr.Labels[constants.ClusterLabel]
 	if !ok {
+		klog.Infof("++++>CSRSignController(%s): exit 7", csrName)
 		return nil
 	}
 
 	// Get ManagedCluster
 	_, err = c.managedClusterLister.Get(clusterName)
 	if errors.IsNotFound(err) {
+		klog.Infof("++++>CSRSignController(%s): exit 8", csrName)
 		return nil
 	}
 	if err != nil {
+		klog.Infof("++++>CSRSignController(%s): exit 9", csrName)
 		return err
 	}
 
 	_, err = c.managedClusterAddonLister.ManagedClusterAddOns(clusterName).Get(addonName)
 	if errors.IsNotFound(err) {
+		klog.Infof("++++>CSRSignController(%s): exit 10", csrName)
 		return nil
 	}
 	if err != nil {
+		klog.Infof("++++>CSRSignController(%s): exit 11", csrName)
 		return err
 	}
 
 	if registrationOption.CSRSign == nil {
+		klog.Infof("++++>CSRSignController(%s): exit 12", csrName)
 		return nil
 	}
 
 	csr.Status.Certificate = registrationOption.CSRSign(csr)
 
+	klog.Infof("++++>CSRSignController(%s): len(cert)=%d", csrName, len(csr.Status.Certificate))
+
 	_, err = c.kubeClient.CertificatesV1().CertificateSigningRequests().UpdateStatus(ctx, csr, metav1.UpdateOptions{})
 	if err != nil {
+		klog.Infof("++++>CSRSignController(%s): exit 13", csrName)
 		return err
 	}
 	c.eventRecorder.Eventf("AddonCSRAutoApproved", "addon csr %q is signedr", csr.Name)
+	klog.Infof("++++>CSRSignController(%s): exit 14", csrName)
 	return nil
 }
